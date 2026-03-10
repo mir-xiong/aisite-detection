@@ -1,0 +1,20 @@
+:root {
+  color-scheme: light;
+  --page-bg: #f5f6f8;
+  --card-bg: #ffffff;
+  --text-primary: #1f2329;
+  --text-secondary: #5b6472;
+  --border-color: #d8dde6;
+  --accent-color: #3b82f6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--page-bg);
+  color: var(--text-primary);
+}
