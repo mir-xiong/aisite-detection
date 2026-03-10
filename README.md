@@ -54,6 +54,36 @@ npm install
 npx wrangler dev worker.js
 ```
 
+### Docker Deployment
+
+```bash
+# Build and start
+cd deploy
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
+```
+
+Access at: http://localhost:3000
+
+**Custom port:** Edit `deploy/docker-compose.yml`:
+```yaml
+ports:
+  - "8080:3000"  # Map host port 8080 to container port 3000
+```
+
+**Environment variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Server port |
+| `HOST` | `0.0.0.0` | Server host |
+| `NODE_ENV` | `production` | Node environment |
+
 ## API
 
 ### `POST /api/detect`

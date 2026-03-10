@@ -54,6 +54,36 @@ npm install
 npx wrangler dev worker.js
 ```
 
+### Docker 部署
+
+```bash
+# 构建并启动
+cd deploy
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
+
+# 停止
+docker-compose down
+```
+
+访问地址: http://localhost:3000
+
+**自定义端口：** 编辑 `deploy/docker-compose.yml`:
+```yaml
+ports:
+  - "8080:3000"  # 将主机 8080 端口映射到容器 3000 端口
+```
+
+**环境变量：**
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `PORT` | `3000` | 服务端口 |
+| `HOST` | `0.0.0.0` | 服务地址 |
+| `NODE_ENV` | `production` | Node 环境 |
+
 ## API 接口
 
 ### `POST /api/detect`
