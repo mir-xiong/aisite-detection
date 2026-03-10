@@ -4,6 +4,20 @@
 
 Detect whether an API gateway supports OpenAI, Anthropic, or Gemini-compatible endpoints — by probing real HTTP requests.
 
+## Screenshots
+
+**Home — Enter Base URL and API Key:**
+
+![Home](./docs/screenshots/home.png)
+
+**Detection Results — Provider Cards with Re-detect:**
+
+![Detection Results](./docs/screenshots/detection-results.png)
+
+**Request Trace Drawer — Masked HTTP Details:**
+
+![Trace Drawer](./docs/screenshots/trace-detail.png)
+
 ## Features
 
 - **Multi-provider detection** — OpenAI Chat, OpenAI Codex (Responses API), Anthropic, and Gemini

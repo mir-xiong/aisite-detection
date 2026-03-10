@@ -4,6 +4,20 @@
 
 检测 API 网关是否支持 OpenAI、Anthropic 或 Gemini 兼容接口 —— 通过发送真实 HTTP 请求进行探测。
 
+## 截图预览
+
+**首页 — 输入 Base URL 和 API Key：**
+
+![首页](./docs/screenshots/home.png)
+
+**检测结果 — Provider 卡片支持单独重新检测：**
+
+![检测结果](./docs/screenshots/detection-results.png)
+
+**请求追踪抽屉 — 脱敏后的 HTTP 详情：**
+
+![请求追踪](./docs/screenshots/trace-detail.png)
+
 ## 功能特性
 
 - **多 Provider 检测** — 支持 OpenAI Chat、OpenAI Codex (Responses API)、Anthropic、Gemini
