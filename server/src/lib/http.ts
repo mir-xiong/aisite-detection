@@ -53,14 +53,16 @@ export async function probeJson(url: string, options: ProbeJsonOptions = {}): Pr
       latencyMs,
     }
 
-    if (contentType.includes('application/json')) {
-      result.json = await response.json()
-      return result
-    }
-
-    result.text = await response.text()
-    if (response.ok) {
-      result.errorType = 'unsupported_format'
+    // Try to parse JSON regardless of content-type (some providers don't set proper headers)
+    const text = await response.text()
+    try {
+      result.json = JSON.parse(text)
+    } catch {
+      // Not valid JSON, store as text
+      result.text = text
+      if (response.ok) {
+        result.errorType = 'unsupported_format'
+      }
     }
     return result
   } catch (error) {

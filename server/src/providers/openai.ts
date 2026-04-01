@@ -13,7 +13,7 @@ function pickCheapModel(models: string[]): string {
   return models.find((m) => /mini|small|nano/i.test(m)) ?? models[0]
 }
 
-function isOpenAIErrorJson(body: unknown): body is { error: { message?: string; type?: string } } {
+function isOpenAIErrorJson(body: unknown): body is { error: { message?: string; type?: string; code?: string } } {
   const obj = body as { error?: { message?: string } } | undefined
   return Boolean(obj?.error)
 }
@@ -24,6 +24,9 @@ interface SubTypeProbeResult {
   statusCode?: number
   latencyMs?: number
   isAuthError: boolean
+  isPaymentError?: boolean
+  isModelError?: boolean
+  availableModels?: string[]
   message?: string
   trace: RequestTrace
 }
@@ -35,7 +38,9 @@ async function probeSubType(
   body: object,
   timeoutMs: number,
   note: string,
+  availableModels: string[] = [],
 ): Promise<SubTypeProbeResult> {
+  const probeModel = (body as { model?: string }).model || FALLBACK_MODEL
   const url = joinUrl(baseUrl, path)
   const reqHeaders = { Authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }
   const response = await probeJson(url, {
@@ -52,15 +57,24 @@ async function probeSubType(
     statusCode: response.statusCode,
     latencyMs: response.latencyMs,
     note,
-    requestHeaders: maskHeaders(reqHeaders),
+    requestHeaders: mask_headers(reqHeaders),
     requestBody: body,
     responseBody: response.json ?? response.text,
   }
 
   if (response.statusCode === 200 && response.json) {
-    return { detected: true, endpointTried: url, statusCode: response.statusCode, latencyMs: response.latencyMs, isAuthError: false, trace }
+    return { 
+      detected: true, 
+      endpointTried: url, 
+      statusCode: response.statusCode, 
+      latencyMs: response.latencyMs, 
+      isAuthError: false,
+      availableModels,
+      trace 
+    }
   }
 
+  // Auth errors (401, 403)
   if ((response.statusCode === 401 || response.statusCode === 403) && isOpenAIErrorJson(response.json)) {
     return {
       detected: true,
@@ -73,7 +87,56 @@ async function probeSubType(
     }
   }
 
+  // Payment/credit/limit errors (402, 403, 429) - API exists but payment issue
+  if (response.statusCode === 402 || response.statusCode === 403 || response.statusCode === 429) {
+    const errorMsg = typeof response.json === 'object' && response.json !== null 
+      ? JSON.stringify(response.json) 
+      : response.text || ''
+    const paymentKeywords = ['credit', 'payment', 'insufficient', 'quota', 'limit', 'rate', 'expired', '到期', '余额', '账户']
+    const isPaymentError = paymentKeywords.some(kw => errorMsg.toLowerCase().includes(kw))
+    
+    if (isPaymentError) {
+      const jsonMsg = typeof response.json === 'object' && response.json !== null 
+        ? ((response.json as {error?: {message?: string}}).error?.message) 
+        : undefined
+      return {
+        detected: true,
+        endpointTried: url,
+        statusCode: response.statusCode,
+        latencyMs: response.latencyMs,
+        isAuthError: false,
+        isPaymentError: true,
+        message: jsonMsg || `Payment/credit issue: ${errorMsg.slice(0, 100)}`,
+        availableModels,
+        trace,
+      }
+    }
+  }
+
+  // Model not supported errors (400 with model error) - API exists but model unavailable
   if (response.statusCode === 400 && isOpenAIErrorJson(response.json)) {
+    const errorMsg = (response.json.error.message?.toLowerCase() || '') + (response.json.error.code?.toLowerCase() || '')
+    const modelKeywords = ['model', 'not supported', 'not found', 'invalid_parameter', 'does not exist', 'unsupported']
+    const isModelError = modelKeywords.some(kw => errorMsg.includes(kw))
+    
+    if (isModelError) {
+      const modelHint = availableModels.length > 0 
+        ? ` Available models: ${availableModels.slice(0, 5).join(', ')}${availableModels.length > 5 ? '...' : ''}`
+        : ' Check /v1/models for available models.'
+      return {
+        detected: true,
+        endpointTried: url,
+        statusCode: response.statusCode,
+        latencyMs: response.latencyMs,
+        isAuthError: false,
+        isModelError: true,
+        message: `API detected, but model '${probeModel}' not available.${modelHint}`,
+        availableModels,
+        trace,
+      }
+    }
+    
+    // Other 400 errors with OpenAI format
     return {
       detected: true,
       endpointTried: url,
@@ -81,11 +144,25 @@ async function probeSubType(
       latencyMs: response.latencyMs,
       isAuthError: false,
       message: response.json.error.message,
+      availableModels,
       trace,
     }
   }
 
   return { detected: false, endpointTried: url, trace, isAuthError: false }
+}
+
+// Helper to mask sensitive headers
+function mask_headers(headers: Record<string, string>): Record<string, string> {
+  const masked: Record<string, string> = {}
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === 'authorization') {
+      masked[key] = value.slice(0, 10) + '***' + value.slice(-4)
+    } else {
+      masked[key] = value
+    }
+  }
+  return masked
 }
 
 export async function detectOpenAI(
@@ -106,7 +183,7 @@ export async function detectOpenAI(
     statusCode: modelResponse.statusCode,
     latencyMs: modelResponse.latencyMs,
     note: 'model list',
-    requestHeaders: maskHeaders(reqHeaders),
+    requestHeaders: mask_headers(reqHeaders),
     responseBody: modelResponse.json ?? modelResponse.text,
   }
 
@@ -124,14 +201,14 @@ export async function detectOpenAI(
     model: probeModel,
     messages: [{ role: 'user', content: 'hi' }],
     max_tokens: 1,
-  }, timeoutMs, 'chat probe')
+  }, timeoutMs, 'chat probe', models)
 
   // Phase 3: Probe Responses API (Codex)
   const codexProbe = await probeSubType(baseUrl, apiKey, RESPONSES_PATH, {
     model: probeModel,
     input: 'hi',
     max_output_tokens: 1,
-  }, timeoutMs, 'responses probe')
+  }, timeoutMs, 'responses probe', models)
 
   // Phase 4: Build separate results
   function buildResult(
@@ -147,10 +224,16 @@ export async function detectOpenAI(
       if (probe.isAuthError) {
         confidence = 'medium'
         errorType = 'auth'
+      } else if (probe.isPaymentError) {
+        confidence = 'medium'
+        errorType = 'payment'
+      } else if (probe.isModelError) {
+        confidence = 'medium'
+        errorType = 'model_not_found'
       } else if (probe.statusCode === 200) {
         confidence = models.length > 0 ? 'high' : 'medium'
       } else {
-        confidence = 'low'
+        confidence = 'medium'
         errorType = 'bad_request'
       }
 
@@ -158,7 +241,7 @@ export async function detectOpenAI(
         provider,
         supported: true,
         confidence,
-        models,
+        models: probe.availableModels || models,
         endpointTried: probe.endpointTried,
         statusCode: probe.statusCode,
         latencyMs: probe.latencyMs,

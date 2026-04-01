@@ -2,6 +2,8 @@ export type ProviderKind = 'openai' | 'openai-chat' | 'openai-codex' | 'anthropi
 export type DetectionConfidence = 'high' | 'medium' | 'low'
 export type DetectionErrorType =
   | 'auth'
+  | 'payment'
+  | 'model_not_found'
   | 'not_found'
   | 'bad_request'
   | 'unsupported_format'
